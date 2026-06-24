@@ -1,3 +1,5 @@
 .pio
 .vscode
 .DS_Store
+node_modules
+public/src/index.js
