@@ -382,6 +382,23 @@ const loadPreset = () => {
         }
     });
 };
+const removePreset = () => {
+    fetch(`/slot/remove?0&nocache=${new Date().getTime()}`).then(() => {
+        setTimeout(() => {
+            clearTimeout(GBSControl.wsTimeout);
+            // GBSControl.wsTimeout = setTimeout(timeOutWs, 6000); //TODO: calc timeout
+            fetch(`/slot/remove?1&nocache=${new Date().getTime()}`).then(() => {
+                setTimeout(() => {
+                    fetchSlotNames().then((success) => {
+                        if (success) {
+                            updateSlotNames();
+                        }
+                    });
+                }, 500);
+            });
+        }, 200);
+    });
+};
 const getSlotsHTML = () => {
     // prettier-ignore
     return [
