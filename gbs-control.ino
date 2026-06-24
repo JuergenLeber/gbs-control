@@ -204,6 +204,8 @@ String slotIndexMap = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz01234
 
 char serialCommand;               // Serial / Web Server commands
 char userCommand;               // Serial / Web Server commands
+String pendingWifiSSID;
+String pendingWifiPassword;
 static uint8_t lastSegment = 0xFF; // GBS segment for direct access
 //uint8_t globalDelay; // used for dev / debug
 
@@ -9273,14 +9275,23 @@ void handleType2Command(char argument)
             }
             saveUserPrefs();
             break;
-        case 'u':
-            // restart to attempt wifi station mode connect
-            delay(30);
-            WiFi.mode(WIFI_STA);
-            WiFi.hostname(device_hostname_partial); // _full
-            delay(30);
-            ESP.reset();
+        case 'u': {
+            // Persist WiFi credentials and STA mode directly via SDK flash functions.
+            // wifi_set_opmode() and wifi_station_set_config() write to flash (unlike
+            // their *_current() variants which only update RAM).
+            struct station_config wifiConf;
+            memset(&wifiConf, 0, sizeof(wifiConf));
+            if (pendingWifiSSID.length()) {
+                strncpy(reinterpret_cast<char *>(wifiConf.ssid), pendingWifiSSID.c_str(), sizeof(wifiConf.ssid) - 1);
+                strncpy(reinterpret_cast<char *>(wifiConf.password), pendingWifiPassword.c_str(), sizeof(wifiConf.password) - 1);
+            }
+            wifi_set_opmode(STATION_MODE);
+            wifi_station_set_config(&wifiConf);
+            WiFi.hostname(device_hostname_partial);
+            delay(200);
+            ESP.restart();
             break;
+        }
         case 'v': {
             uopt->wantFullHeight = !uopt->wantFullHeight;
             saveUserPrefs();
@@ -9574,16 +9585,12 @@ void startWebserver()
             request->beginResponse(200, "application/json", "true");
         request->send(response);
 
-        if (request->arg("n").length()) {     // n holds ssid
-            if (request->arg("p").length()) { // p holds password
-                // false = only save credentials, don't connect
-                WiFi.begin(request->arg("n").c_str(), request->arg("p").c_str(), 0, 0, false);
-            } else {
-                WiFi.begin(request->arg("n").c_str(), emptyString, 0, 0, false);
-            }
-        } else {
-            WiFi.begin();
-        }
+        // Store credentials for deferred WiFi.begin() in main loop.
+        // Calling WiFi.begin() here would invoke WiFi.mode(WIFI_STA) from within
+        // an lwIP callback, tearing down the AP while the TCP connection is still
+        // alive and causing a crash.
+        pendingWifiSSID = request->arg("n");
+        pendingWifiPassword = request->arg("p");
 
         userCommand = 'u'; // next loop, set wifi station mode and restart device
     });
