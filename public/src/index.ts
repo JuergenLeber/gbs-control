@@ -154,6 +154,8 @@ const GBSControl = {
     promptCancel: null,
     promptContent: null,
     promptInput: null,
+    hostnameInput: null,
+    hostnameSaveButton: null,
   },
   updateTerminalTimer: 0,
   webSocketServerUrl: "",
@@ -582,6 +584,7 @@ const fetchSlotNamesAndInit = () => {
       }
       initUIElements();
       wifiGetStatus().then(() => {
+        hostnameGet();
         initUI();
         updateSlotNames();
         createWebSocket();
@@ -924,6 +927,45 @@ const wifiGetStatus = () => {
     });
 };
 
+function hostnameGet() {
+  return fetch(`/hostname/get?${+new Date()}`)
+    .then((r) => r.json())
+    .then((data: { hostname: string }) => {
+      if (data.hostname) {
+        GBSControl.ui.hostnameInput.value = data.hostname;
+      }
+    })
+    .catch(() => {});
+}
+
+function hostnameSave() {
+  const hn = GBSControl.ui.hostnameInput.value.trim();
+  if (
+    !hn.length ||
+    hn.length > 32 ||
+    !/^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$/.test(hn)
+  ) {
+    gbsAlert(
+      "Invalid hostname. Use letters, digits and hyphens only (no leading/trailing hyphens, max 32 chars)."
+    );
+    return;
+  }
+  const formData = new FormData();
+  formData.append("h", hn);
+  fetch("/hostname/set", { method: "POST", body: formData })
+    .then((r) => r.json())
+    .then((data: { hostname: string }) => {
+      gbsAlert(
+        `Hostname set to '${data.hostname}'. GBSControl is rebooting.\nAfter reboot, access at http://${data.hostname}.local/`
+      )
+        .then(() => {
+          window.location.href = `http://${data.hostname}.local/`;
+        })
+        .catch(() => {});
+    })
+    .catch(() => {});
+}
+
 const wifiConnect = () => {
   const ssid = GBSControl.ui.wifiSSDInput.value;
   const password = GBSControl.ui.wifiPasswordInput.value;
@@ -1227,6 +1269,8 @@ const initUIElements = () => {
     promptCancel: document.querySelector("[gbs-prompt-cancel]"),
     promptContent: document.querySelector("[gbs-prompt-content]"),
     promptInput: document.querySelector('[gbs-input="prompt-input"]'),
+    hostnameInput: document.querySelector('[gbs-input="hostname"]'),
+    hostnameSaveButton: document.querySelector("[gbs-hostname-save]"),
   };
 };
 
@@ -1251,6 +1295,7 @@ const initGeneralListeners = () => {
     "click",
     toggleCustomSlotFilters
   );
+  GBSControl.ui.hostnameSaveButton.addEventListener("click", hostnameSave);
 
   GBSControl.ui.alertOk.addEventListener("click", () => {
     GBSControl.ui.alert.setAttribute("hidden", "");

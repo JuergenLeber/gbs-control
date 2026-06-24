@@ -134,6 +134,8 @@ static const char st_info_string[] PROGMEM =
     "(WiFi): Access 'http://gbsslave:80' or 'http://gbsslave.local' (or device IP) in your browser";
 #endif
 
+String device_hostname = device_hostname_partial; // runtime hostname, loadable from /hostname.txt
+
 AsyncWebServer server(80);
 DNSServer dnsServer;
 WebSocketsServer webSocket(81);
@@ -7218,7 +7220,19 @@ void setup()
 
     // millis() at this point: typically 65ms
     // start web services as early in boot as possible
-    WiFi.hostname(device_hostname_partial); // was _full
+    // load hostname before WiFi.hostname() and startWebserver() so onConnect uses the right name
+    if (LittleFS.begin()) {
+        File fh = LittleFS.open("/hostname.txt", "r");
+        if (fh) {
+            String hn = fh.readStringUntil('\n');
+            hn.trim();
+            if (hn.length() > 0 && hn.length() <= 32) {
+                device_hostname = hn;
+            }
+            fh.close();
+        }
+    }
+    WiFi.hostname(device_hostname.c_str()); // was _full
 
     startWire();
     // run some dummy commands to init I2C to GBS and cached segments
@@ -7430,7 +7444,7 @@ void setup()
     if (WiFi.status() == WL_CONNECTED) {
         // nothing
     } else if (WiFi.SSID().length() == 0) {
-        SerialM.println(FPSTR(ap_info_string));
+        SerialM.println("(WiFi): AP mode (SSID: " + String(ap_ssid) + ", pass 'qqqqqqqq'): Access 'http://" + device_hostname + ".local' in your browser");
     } else {
         SerialM.println(F("(WiFi): still connecting.."));
         WiFi.reconnect(); // only valid for station class (ok here)
@@ -9287,7 +9301,7 @@ void handleType2Command(char argument)
             }
             wifi_set_opmode(STATION_MODE);
             wifi_station_set_config(&wifiConf);
-            WiFi.hostname(device_hostname_partial);
+            WiFi.hostname(device_hostname.c_str());
             delay(200);
             ESP.restart();
             break;
@@ -9521,15 +9535,15 @@ void startWebserver()
     persWM.onConnect([]() {
         SerialM.print(F("(WiFi): STA mode connected; IP: "));
         SerialM.println(WiFi.localIP().toString());
-        if (MDNS.begin(device_hostname_partial, WiFi.localIP())) { // MDNS request for gbscontrol.local
+        if (MDNS.begin(device_hostname.c_str(), WiFi.localIP())) { // MDNS request for gbscontrol.local
             //Serial.println("MDNS started");
             MDNS.addService("http", "tcp", 80); // Add service to MDNS-SD
             MDNS.announce();
         }
-        SerialM.println(FPSTR(st_info_string));
+        SerialM.println("(WiFi): Access 'http://" + device_hostname + ":80' or 'http://" + device_hostname + ".local' (or device IP) in your browser");
     });
     persWM.onAp([]() {
-        SerialM.println(FPSTR(ap_info_string));
+        SerialM.println("(WiFi): AP mode (SSID: " + String(ap_ssid) + ", pass 'qqqqqqqq'): Access 'http://" + device_hostname + ".local' in your browser");
         // add mdns announce here as well?
     });
 
@@ -9848,6 +9862,34 @@ void startWebserver()
     server.on("/wifi/status", HTTP_GET, [](AsyncWebServerRequest *request) {
         WiFiMode_t wifiMode = WiFi.getMode();
         request->send(200, "application/json", wifiMode == WIFI_AP ? "{\"mode\":\"ap\"}" : "{\"mode\":\"sta\",\"ssid\":\"" + WiFi.SSID() + "\"}");
+    });
+
+    server.on("/hostname/get", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send(200, "application/json", "{\"hostname\":\"" + device_hostname + "\"}");
+    });
+
+    server.on("/hostname/set", HTTP_POST, [](AsyncWebServerRequest *request) {
+        if (request->hasParam("h", true)) {
+            String hn = request->getParam("h", true)->value();
+            hn.trim();
+            bool valid = hn.length() > 0 && hn.length() <= 32;
+            for (size_t i = 0; i < hn.length() && valid; i++) {
+                char c = hn.charAt(i);
+                if (!isAlphaNumeric(c) && c != '-') valid = false;
+            }
+            if (valid && hn.charAt(0) != '-' && hn.charAt(hn.length() - 1) != '-') {
+                File fh = LittleFS.open("/hostname.txt", "w");
+                if (fh) {
+                    fh.print(hn);
+                    fh.close();
+                    device_hostname = hn;
+                }
+                request->send(200, "application/json", "{\"hostname\":\"" + hn + "\"}");
+                userCommand = 'a'; // restart
+                return;
+            }
+        }
+        request->send(400, "application/json", "{\"error\":\"invalid hostname\"}");
     });
 
     server.on("/gbs/restore-filters", HTTP_GET, [](AsyncWebServerRequest *request) {

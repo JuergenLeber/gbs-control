@@ -1445,6 +1445,35 @@
               </div>
             </fieldset>
           </fieldset>
+          <fieldset class="gbs-fieldset">
+            <legend class="gbs-fieldset__legend">
+              <div class="gbs-icon">dns</div>
+              <div>Hostname (mDNS)</div>
+            </legend>
+            <ul class="gbs-help">
+              <!-- prettier-ignore -->
+              <li>The hostname advertised via mDNS. Access the device at &lt;hostname&gt;.local</li>
+              <li>Allowed characters: letters, digits, hyphens. Max 32 characters. Reboot required.</li>
+            </ul>
+            <div class="gbs-flex">
+              <input
+                class="gbs-button gbs-wifi__input"
+                type="text"
+                maxlength="32"
+                gbs-input="hostname"
+                placeholder="gbscontrol"
+              />
+            </div>
+            <div class="gbs-flex">
+              <button
+                gbs-hostname-save
+                class="gbs-button gbs-button__control gbs-button__secondary"
+              >
+                <div class="gbs-icon">save</div>
+                <div>Save &amp; Reboot</div>
+              </button>
+            </div>
+          </fieldset>
         </section>
         <section name="prompt" hidden>
           <fieldset class="gbs-fieldset">

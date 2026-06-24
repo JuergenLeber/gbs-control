@@ -2124,6 +2124,35 @@ section[name="alert"] {
               </div>
             </fieldset>
           </fieldset>
+          <fieldset class="gbs-fieldset">
+            <legend class="gbs-fieldset__legend">
+              <div class="gbs-icon">dns</div>
+              <div>Hostname (mDNS)</div>
+            </legend>
+            <ul class="gbs-help">
+              <!-- prettier-ignore -->
+              <li>The hostname advertised via mDNS. Access the device at &lt;hostname&gt;.local</li>
+              <li>Allowed characters: letters, digits, hyphens. Max 32 characters. Reboot required.</li>
+            </ul>
+            <div class="gbs-flex">
+              <input
+                class="gbs-button gbs-wifi__input"
+                type="text"
+                maxlength="32"
+                gbs-input="hostname"
+                placeholder="gbscontrol"
+              />
+            </div>
+            <div class="gbs-flex">
+              <button
+                gbs-hostname-save
+                class="gbs-button gbs-button__control gbs-button__secondary"
+              >
+                <div class="gbs-icon">save</div>
+                <div>Save &amp; Reboot</div>
+              </button>
+            </div>
+          </fieldset>
         </section>
         <section name="prompt" hidden>
           <fieldset class="gbs-fieldset">
@@ -2333,6 +2362,8 @@ const GBSControl = {
         promptCancel: null,
         promptContent: null,
         promptInput: null,
+        hostnameInput: null,
+        hostnameSaveButton: null,
     },
     updateTerminalTimer: 0,
     webSocketServerUrl: "",
@@ -2685,6 +2716,7 @@ const fetchSlotNamesAndInit = () => {
         }
         initUIElements();
         wifiGetStatus().then(() => {
+            hostnameGet();
             initUI();
             updateSlotNames();
             createWebSocket();
@@ -2935,6 +2967,37 @@ const wifiGetStatus = () => {
         }
     });
 };
+function hostnameGet() {
+    return fetch(`/hostname/get?${+new Date()}`)
+        .then((r) => r.json())
+        .then((data) => {
+        if (data.hostname) {
+            GBSControl.ui.hostnameInput.value = data.hostname;
+        }
+    })
+        .catch(() => { });
+}
+function hostnameSave() {
+    const hn = GBSControl.ui.hostnameInput.value.trim();
+    if (!hn.length ||
+        hn.length > 32 ||
+        !/^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$/.test(hn)) {
+        gbsAlert("Invalid hostname. Use letters, digits and hyphens only (no leading/trailing hyphens, max 32 chars).");
+        return;
+    }
+    const formData = new FormData();
+    formData.append("h", hn);
+    fetch("/hostname/set", { method: "POST", body: formData })
+        .then((r) => r.json())
+        .then((data) => {
+        gbsAlert(`Hostname set to '${data.hostname}'. GBSControl is rebooting.\nAfter reboot, access at http://${data.hostname}.local/`)
+            .then(() => {
+            window.location.href = `http://${data.hostname}.local/`;
+        })
+            .catch(() => { });
+    })
+        .catch(() => { });
+}
 const wifiConnect = () => {
     const ssid = GBSControl.ui.wifiSSDInput.value;
     const password = GBSControl.ui.wifiPasswordInput.value;
@@ -3166,6 +3229,8 @@ const initUIElements = () => {
         promptCancel: document.querySelector("[gbs-prompt-cancel]"),
         promptContent: document.querySelector("[gbs-prompt-content]"),
         promptInput: document.querySelector('[gbs-input="prompt-input"]'),
+        hostnameInput: document.querySelector('[gbs-input="hostname"]'),
+        hostnameSaveButton: document.querySelector("[gbs-hostname-save]"),
     };
 };
 const initGeneralListeners = () => {
@@ -3184,6 +3249,7 @@ const initGeneralListeners = () => {
     GBSControl.ui.wifiStaButton.addEventListener("click", wifiScanSSID);
     GBSControl.ui.developerSwitch.addEventListener("click", toggleDeveloperMode);
     GBSControl.ui.customSlotFilters.addEventListener("click", toggleCustomSlotFilters);
+    GBSControl.ui.hostnameSaveButton.addEventListener("click", hostnameSave);
     GBSControl.ui.alertOk.addEventListener("click", () => {
         GBSControl.ui.alert.setAttribute("hidden", "");
         gbsAlertPromise.resolve();
