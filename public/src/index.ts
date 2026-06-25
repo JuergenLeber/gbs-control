@@ -157,6 +157,7 @@ const GBSControl = {
     promptInput: null,
     hostnameInput: null,
     hostnameSaveButton: null,
+    version: null as Element | null,
   },
   updateTerminalTimer: 0,
   webSocketServerUrl: "",
@@ -588,6 +589,7 @@ const fetchSlotNamesAndInit = () => {
       initUIElements();
       wifiGetStatus().then(() => {
         hostnameGet();
+        versionGet();
         initUI();
         updateSlotNames();
         createWebSocket();
@@ -941,6 +943,17 @@ function hostnameGet() {
     .catch(() => {});
 }
 
+function versionGet() {
+  return fetch(`/version/get?${+new Date()}`)
+    .then((r) => r.json())
+    .then((data: { version: string }) => {
+      if (data.version && GBSControl.ui.version) {
+        GBSControl.ui.version.textContent = data.version;
+      }
+    })
+    .catch(() => {});
+}
+
 function hostnameSave() {
   const hn = GBSControl.ui.hostnameInput.value.trim();
   if (
@@ -1274,6 +1287,7 @@ const initUIElements = () => {
     promptInput: document.querySelector('[gbs-input="prompt-input"]'),
     hostnameInput: document.querySelector('[gbs-input="hostname"]'),
     hostnameSaveButton: document.querySelector("[gbs-hostname-save]"),
+    version: document.querySelector("span[gbs-version]"),
   };
 };
 

@@ -2020,6 +2020,7 @@ section[name="alert"] {
             <legend class="gbs-fieldset__legend">
               <div class="gbs-icon">bolt</div>
               <div>System</div>
+              <div class="gbs-version">[<span gbs-version></span>]</div>
             </legend>
             <div class="gbs-flex">
               <button
@@ -2375,6 +2376,7 @@ const GBSControl = {
         promptInput: null,
         hostnameInput: null,
         hostnameSaveButton: null,
+        version: null,
     },
     updateTerminalTimer: 0,
     webSocketServerUrl: "",
@@ -2730,6 +2732,7 @@ const fetchSlotNamesAndInit = () => {
         initUIElements();
         wifiGetStatus().then(() => {
             hostnameGet();
+            versionGet();
             initUI();
             updateSlotNames();
             createWebSocket();
@@ -2990,6 +2993,16 @@ function hostnameGet() {
     })
         .catch(() => { });
 }
+function versionGet() {
+    return fetch(`/version/get?${+new Date()}`)
+        .then((r) => r.json())
+        .then((data) => {
+        if (data.version && GBSControl.ui.version) {
+            GBSControl.ui.version.textContent = data.version;
+        }
+    })
+        .catch(() => { });
+}
 function hostnameSave() {
     const hn = GBSControl.ui.hostnameInput.value.trim();
     if (!hn.length ||
@@ -3244,6 +3257,7 @@ const initUIElements = () => {
         promptInput: document.querySelector('[gbs-input="prompt-input"]'),
         hostnameInput: document.querySelector('[gbs-input="hostname"]'),
         hostnameSaveButton: document.querySelector("[gbs-hostname-save]"),
+        version: document.querySelector("span[gbs-version]"),
     };
 };
 const initGeneralListeners = () => {

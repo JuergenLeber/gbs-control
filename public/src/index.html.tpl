@@ -1341,6 +1341,7 @@
             <legend class="gbs-fieldset__legend">
               <div class="gbs-icon">bolt</div>
               <div>System</div>
+              <div class="gbs-version">[<span gbs-version></span>]</div>
             </legend>
             <div class="gbs-flex">
               <button

@@ -17,6 +17,7 @@
 #include "ofw_RGBS.h"
 #include "options.h"
 #include "slot.h"
+#include "version.h"
 
 #include <Wire.h>
 #include "tv5725.h"
@@ -9879,6 +9880,10 @@ void startWebserver()
 
     server.on("/hostname/get", HTTP_GET, [](AsyncWebServerRequest *request) {
         request->send(200, "application/json", "{\"hostname\":\"" + device_hostname + "\"}");
+    });
+
+    server.on("/version/get", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send(200, "application/json", "{\"version\":\"" GBS_VERSION "\"}");
     });
 
     server.on("/hostname/set", HTTP_POST, [](AsyncWebServerRequest *request) {
