@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        env: [Release]
+        env: [d1_mini]
 
     steps:
       - uses: actions/checkout@v4
@@ -58,18 +58,18 @@ jobs:
       contents: write
 
     steps:
-      - name: Download Release firmware
+      - name: Download d1_mini firmware
         uses: actions/download-artifact@v4
         with:
-          name: firmware-Release
-          path: artifacts/Release
+          name: firmware-d1_mini
+          path: artifacts/d1_mini
 
       - name: Rename firmware files
         run: |
-          mv artifacts/Release/firmware.bin  artifacts/GBSC-Release-${{ github.ref_name }}.bin
+          mv artifacts/d1_mini/firmware.bin  artifacts/GBSC-d1_mini-${{ github.ref_name }}.bin
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/GBSC-Release-${{ github.ref_name }}.bin
+            artifacts/GBSC-d1_mini-${{ github.ref_name }}.bin
