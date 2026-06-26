@@ -1,5 +1,19 @@
 # gbs-control
 
+## About this fork
+The GBS-Control project from @ramapcsx2 is great but had some issues and long time no updates. So I created this fork with the following changes:
+- Updated and cleaned up platformio.ini to have a working build including OTA for development
+- Dependency modernization: Replaced the copied dependencies with proper libraries, updated all dependencies and fixed breaking change compiler issues
+- Migrated SPIFFS (deprecated) to LittleFS (unfortunately you have to completely erase your ESP8266 upfront and reupload the firmware)
+- Web UI cleaned up and synced with static changes from webui.html
+- Fixed problems with persisting WiFi networks before reboot
+- Added configurable mDNS hostname setting to allow multiple GBS-Control devices on the same network
+- Stabilized video output in general and specifically for csync RGB sources (Schneider/Amstrad CPC 464 and 6128 now work great)
+- Added a version number (displayed in system settings) for automated CI builds
+- Cleanup of project files
+
+## Original README.md
+
 Documentation: https://ramapcsx2.github.io/gbs-control/
 
 Gbscontrol is an alternative firmware for Tvia Trueview5725 based upscalers / video converter boards.  
