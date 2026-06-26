@@ -10,6 +10,7 @@ The GBS-Control project from @ramapcsx2 is great but had some issues and long ti
 - Added configurable mDNS hostname setting to allow multiple GBS-Control devices on the same network
 - Stabilized video output in general and specifically for csync RGB sources (Schneider/Amstrad CPC 464 and 6128 now work great)
 - Added a version number (displayed in system settings) for automated CI builds
+- Added firmware update via file from web UI
 - Cleanup of project files
 
 ## Original README.md
