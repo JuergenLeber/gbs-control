@@ -1,0 +1,75 @@
+name: Build
+
+on:
+  push:
+    branches: ["master"]
+    tags:
+      - "v*.*.*"
+  pull_request:
+    branches: ["master"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        env: [Release]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: platformio-${{ hashFiles('platformio.ini') }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Set version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION="${{ github.ref_name }}"
+          else
+            VERSION="dev"
+          fi
+          printf '#ifndef _VERSION_H_\n#define _VERSION_H_\n#define GBS_VERSION "%s"\n#endif\n' "$VERSION" > version.h
+
+      - name: Build ${{ matrix.env }}
+        run: platformio run -e ${{ matrix.env }}
+
+      - name: Upload ${{ matrix.env }} firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ matrix.env }}
+          path: .pio/build/${{ matrix.env }}/firmware.bin
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download Release firmware
+        uses: actions/download-artifact@v4
+        with:
+          name: firmware-Release
+          path: artifacts/Release
+
+      - name: Rename firmware files
+        run: |
+          mv artifacts/Release/firmware.bin  artifacts/GBSC-Release-${{ github.ref_name }}.bin
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/GBSC-Release-${{ github.ref_name }}.bin
