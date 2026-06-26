@@ -107,6 +107,16 @@ void Si5351mcu::setFreq(uint8_t clk, uint32_t freq) {
     // finds the even divider which delivers the intended Frequency
     if (outdivider % 2) outdivider--;
 
+    // Some Si5351 modules struggle to lock near the top of the VCO range (~864 MHz).
+    // Force a lower outdivider to keep fvco in a more stable region.
+    if (outdivider == 8 && freq >= 100000000UL) {
+        outdivider = 6; // fvco ~600..700 MHz instead of ~864 MHz
+    }
+    // Similar issue around 81 MHz: default picks outdivider=10 => fvco=810 MHz.
+    if (outdivider == 10 && freq >= 75000000UL && freq <= 90000000UL) {
+        outdivider = 8; // fvco ~600..720 MHz instead of ~810 MHz
+    }
+
     // Calculate the PLL-Frequency (given the even divider)
     fvco = outdivider * R * freq;
 

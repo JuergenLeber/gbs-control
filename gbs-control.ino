@@ -4714,7 +4714,9 @@ void updateSpDynamic(boolean withCurrentVideoModeCheck)
         } else {
             GBS::SP_DLT_REG::write(0x30);
         }
-        GBS::SP_H_PULSE_IGNOR::write(0x02);
+        if (!(rto->syncTypeCsync && videoStandardInputIsPalNtscSd())) {
+            GBS::SP_H_PULSE_IGNOR::write(0x02);
+        }
         //GBS::SP_DIS_SUB_COAST::write(1);
         GBS::SP_H_CST_ST::write(0x10);
         GBS::SP_H_CST_SP::write(0x100);
@@ -4738,7 +4740,7 @@ void updateSpDynamic(boolean withCurrentVideoModeCheck)
             GBS::SP_DLT_REG::write(0xC0);     // old: 0x140 works better than 0x130 with psx
             GBS::SP_H_TIMER_VAL::write(0x28); // 5_33
 
-            if (rto->syncTypeCsync) {
+            if (rto->syncTypeCsync && !withCurrentVideoModeCheck) {
                 uint16_t hPeriod = GBS::HPERIOD_IF::read();
                 for (int i = 0; i < 16; i++) {
                     if (hPeriod == 511 || hPeriod < 200) {
@@ -5996,7 +5998,11 @@ void runSyncWatcher()
         }
     }
 
-    if ((detectedVideoMode == 0 || !status16SpHsStable) && rto->videoStandardInput != 15) {
+    // Once a mode is set, rely on HSACT (not IF mode bits) for sync loss detection.
+    // IF mode bits transiently clear during vsync when vsync extraction from csync isn't working.
+    boolean genuineSyncLoss = !status16SpHsStable ||
+        (detectedVideoMode == 0 && rto->videoStandardInput == 0);
+    if (genuineSyncLoss && rto->videoStandardInput != 15) {
         rto->noSyncCounter++;
         rto->continousStableCounter = 0;
         lastVsyncLock = millis(); // best reset this
@@ -6047,7 +6053,7 @@ void runSyncWatcher()
                 GBS::SP_POST_COAST::write(9);
                 // new: test SD<>EDTV changes
                 uint8_t ignore = GBS::SP_H_PULSE_IGNOR::read();
-                if (ignore >= 0x33) {
+                if (ignore >= 0x33 && !rto->syncTypeCsync) {
                     GBS::SP_H_PULSE_IGNOR::write(ignore / 2);
                 }
             }
@@ -6364,22 +6370,28 @@ void runSyncWatcher()
                         }
                     }
 
+                    // csync SD sources have unreliable VPERIOD_IF (no discrete vsync, VSACT=0)
+                    // — require more stable readings before toggling deinterlacer, and skip
+                    // timingAdjustDelay (clock recalibration based on noisy data causes jumps)
+                    const uint8_t deintStableThreshold = rto->syncTypeCsync ? 8 : 2;
                     if (VPERIOD_IF == 522 || VPERIOD_IF == 524 || VPERIOD_IF == 526 ||
                         VPERIOD_IF == 622 || VPERIOD_IF == 624 || VPERIOD_IF == 626) { // ie v:524, even counts > enable
                         filteredLineCountMotionAdaptiveOn++;
                         filteredLineCountMotionAdaptiveOff = 0;
-                        if (filteredLineCountMotionAdaptiveOn >= 2) // at least >= 2
+                        if (filteredLineCountMotionAdaptiveOn >= deintStableThreshold)
                         {
                             if (uopt->deintMode == 0 && !rto->motionAdaptiveDeinterlaceActive) {
                                 if (GBS::GBS_OPTION_SCANLINES_ENABLED::read() == 1) { // don't rely on rto->scanlinesEnabled
                                     disableScanlines();
                                 }
                                 enableMotionAdaptDeinterlace();
-                                if (timingAdjustDelay == 0) {
-                                    timingAdjustDelay = 11; // arm timer only if it's not already armed
-                                    oddEvenWhenArmed = VPERIOD_IF % 2;
-                                } else {
-                                    timingAdjustDelay = 0; // cancel timer
+                                if (!rto->syncTypeCsync) {
+                                    if (timingAdjustDelay == 0) {
+                                        timingAdjustDelay = 11; // arm timer only if it's not already armed
+                                        oddEvenWhenArmed = VPERIOD_IF % 2;
+                                    } else {
+                                        timingAdjustDelay = 0; // cancel timer
+                                    }
                                 }
                                 preventScanlines = 1;
                             }
@@ -6389,15 +6401,17 @@ void runSyncWatcher()
                                VPERIOD_IF == 623 || VPERIOD_IF == 625 || VPERIOD_IF == 627) { // ie v:523, uneven counts > disable
                         filteredLineCountMotionAdaptiveOff++;
                         filteredLineCountMotionAdaptiveOn = 0;
-                        if (filteredLineCountMotionAdaptiveOff >= 2) // at least >= 2
+                        if (filteredLineCountMotionAdaptiveOff >= deintStableThreshold)
                         {
                             if (uopt->deintMode == 0 && rto->motionAdaptiveDeinterlaceActive) {
                                 disableMotionAdaptDeinterlace();
-                                if (timingAdjustDelay == 0) {
-                                    timingAdjustDelay = 11; // arm timer only if it's not already armed
-                                    oddEvenWhenArmed = VPERIOD_IF % 2;
-                                } else {
-                                    timingAdjustDelay = 0; // cancel timer
+                                if (!rto->syncTypeCsync) {
+                                    if (timingAdjustDelay == 0) {
+                                        timingAdjustDelay = 11; // arm timer only if it's not already armed
+                                        oddEvenWhenArmed = VPERIOD_IF % 2;
+                                    } else {
+                                        timingAdjustDelay = 0; // cancel timer
+                                    }
                                 }
                             }
                             filteredLineCountMotionAdaptiveOff = 0;
@@ -8798,8 +8812,12 @@ void loop()
     // update clamp + coast positions after preset change // do it quickly
     if ((rto->videoStandardInput <= 14 && rto->videoStandardInput != 0) &&
         rto->syncWatcherEnabled && !rto->coastPositionIsSet) {
-        if (rto->continousStableCounter >= 7) {
-            if ((getStatus16SpHsStable() == 1) && (getVideoMode() == rto->videoStandardInput)) {
+        // For csync SD sources the IF mode bits can stay 0 even with valid sync (no vsync detection),
+        // so allow coast setup as long as HSACT is stable, without requiring mode confirmation.
+        boolean readyForCoast = (rto->continousStableCounter >= 7 && getVideoMode() == rto->videoStandardInput) ||
+            (rto->syncTypeCsync && videoStandardInputIsPalNtscSd() && getStatus16SpHsStable() && rto->noSyncCounter == 0);
+        if (readyForCoast) {
+            if (getStatus16SpHsStable() == 1) {
                 updateCoastPosition(0);
                 if (rto->coastPositionIsSet) {
                     if (videoStandardInputIsPalNtscSd()) {
