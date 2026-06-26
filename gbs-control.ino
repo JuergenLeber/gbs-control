@@ -1,6 +1,5 @@
 #include "ntsc_240p.h"
 #include "pal_240p.h"
-#include "pal_288p.h"
 #include "ntsc_720x480.h"
 #include "pal_768x576.h"
 #include "ntsc_1280x720.h"
@@ -4282,8 +4281,6 @@ void applyPresets(uint8_t result)
             writeProgramArrayNew(pal_768x576, false);
         } else if (uopt->presetPreference == 3) {
             writeProgramArrayNew(pal_1280x720, false);
-        } else if (uopt->presetPreference == Output288P) {
-            writeProgramArrayNew(pal_288p, false);
         }
 #if defined(ESP8266)
         else if (uopt->presetPreference == OutputCustomized) {
@@ -7680,9 +7677,6 @@ void updateWebSocketData()
                 case 0x16:
                     toSend[1] = '6';
                     break;
-                case 0x17:
-                    toSend[1] = '7';
-                    break;
                 case PresetHdBypass: // bypass 1
                 case PresetBypassRGBHV: // bypass 2
                     toSend[1] = '8';
@@ -8013,10 +8007,6 @@ void loop()
                 break;
             case 'r':
                 writeProgramArrayNew(pal_240p, false);
-                doPostPresetLoadSteps();
-                break;
-            case 'Q':
-                writeProgramArrayNew(pal_288p, false);
                 doPostPresetLoadSteps();
                 break;
             case '.': {
@@ -9110,8 +9100,7 @@ void handleType2Command(char argument)
         case 'h':
         case 'p':
         case 's':
-        case 'L':
-        case 'y': {
+        case 'L': {
             // load preset via webui
             uint8_t videoMode = getVideoMode();
             if (videoMode == 0 && GBS::STATUS_SYNC_PROC_HSACT::read())
@@ -9130,8 +9119,6 @@ void handleType2Command(char argument)
                 uopt->presetPreference = Output1080P; // 1920x1080
             if (argument == 'L')
                 uopt->presetPreference = OutputDownscale; // downscale
-            if (argument == 'y')
-                uopt->presetPreference = Output288P; // 288p (PAL)
 
             rto->useHdmiSyncFix = 1; // disables sync out when programming preset
             if (rto->videoStandardInput == 14) {

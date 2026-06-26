@@ -177,16 +177,6 @@
                 480p 576p
               </button>
               <button
-                class="gbs-button gbs-button__resolution"
-                gbs-message="y"
-                gbs-message-type="user"
-                gbs-click="normal"
-                gbs-element-ref="button288p"
-                gbs-role="preset"
-              >
-                288p
-              </button>
-              <button
                 gbs-message="L"
                 gbs-message-type="user"
                 gbs-click="normal"
