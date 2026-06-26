@@ -124,6 +124,10 @@ const GBSControl = {
   ui: {
     backupButton: null,
     backupInput: null,
+    firmwareInput: null as Element | null,
+    firmwareUpdateButton: null as Element | null,
+    firmwareFilename: null as Element | null,
+    progressFirmware: null as Element | null,
     customSlotFilters: null,
     developerSwitch: null,
     loader: null,
@@ -879,6 +883,42 @@ const doRestore = (file: ArrayBuffer) => {
   });
 };
 
+const doFirmwareUpdate = (file: File) => {
+  const { firmwareInput, firmwareUpdateButton, firmwareFilename, progressFirmware } = GBSControl.ui;
+  firmwareInput.setAttribute("disabled", "");
+  firmwareUpdateButton.setAttribute("disabled", "");
+  progressFirmware.setAttribute("gbs-progress", "...");
+  const formData = new FormData();
+  formData.append("file", file, file.name);
+  fetch("/firmware/update", {
+    method: "POST",
+    body: formData,
+  })
+    .then((response) => response.json())
+    .then((ok: boolean) => {
+      progressFirmware.setAttribute("gbs-progress", "");
+      firmwareFilename.textContent = "Select .bin file";
+      firmwareInput.removeAttribute("disabled");
+      if (ok) {
+        gbsAlert("Firmware update successful.\nDevice is restarting, please wait then click OK.")
+          .then(() => { window.location.reload(); })
+          .catch(() => {});
+      } else {
+        gbsAlert("Firmware update failed. Please check the file and try again.")
+          .then(() => {})
+          .catch(() => {});
+      }
+    })
+    .catch(() => {
+      progressFirmware.setAttribute("gbs-progress", "");
+      firmwareFilename.textContent = "Select .bin file";
+      firmwareInput.removeAttribute("disabled");
+      gbsAlert("Firmware update failed. Connection error.")
+        .then(() => {})
+        .catch(() => {});
+    });
+};
+
 const downloadBlob = (blob: Blob, name = "file.txt") => {
   // Convert your blob into a Blob URL (a special url that points to an object in the browser's memory)
   const blobUrl = URL.createObjectURL(blob);
@@ -1272,6 +1312,10 @@ const initUIElements = () => {
     slotContainer: document.querySelector("[gbs-slot-html]"),
     backupButton: document.querySelector(".gbs-backup-button"),
     backupInput: document.querySelector(".gbs-backup-input"),
+    firmwareInput: document.querySelector(".gbs-firmware-input"),
+    firmwareUpdateButton: document.querySelector(".gbs-firmware-update-button"),
+    firmwareFilename: document.querySelector(".gbs-firmware-filename"),
+    progressFirmware: document.querySelector("[gbs-progress-firmware]"),
     developerSwitch: document.querySelector("[gbs-dev-switch]"),
     customSlotFilters: document.querySelector("[gbs-slot-custom-filters]"),
     alert: document.querySelector('section[name="alert"]'),
@@ -1297,6 +1341,21 @@ const initGeneralListeners = () => {
     const fileList: FileList = event.target["files"];
     readLocalFile(fileList[0]);
     GBSControl.ui.backupInput.value = "";
+  });
+
+  GBSControl.ui.firmwareInput.addEventListener("change", (event) => {
+    const fileList: FileList = event.target["files"];
+    if (fileList && fileList[0]) {
+      GBSControl.ui.firmwareFilename.textContent = fileList[0].name;
+      GBSControl.ui.firmwareUpdateButton.removeAttribute("disabled");
+      GBSControl.ui.firmwareUpdateButton["__firmwareFile"] = fileList[0];
+    }
+    (GBSControl.ui.firmwareInput as HTMLInputElement).value = "";
+  });
+
+  GBSControl.ui.firmwareUpdateButton.addEventListener("click", () => {
+    const file: File = GBSControl.ui.firmwareUpdateButton["__firmwareFile"];
+    if (file) doFirmwareUpdate(file);
   });
 
   GBSControl.ui.backupButton.addEventListener("click", doBackup);

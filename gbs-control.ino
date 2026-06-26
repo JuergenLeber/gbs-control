@@ -139,6 +139,7 @@ String device_hostname = device_hostname_partial; // runtime hostname, loadable 
 
 AsyncWebServer server(80);
 DNSServer dnsServer;
+bool pendingFirmwareRestart = false;
 WebSocketsServer webSocket(81);
 //AsyncWebSocket webSocket("/ws");
 PersWiFiManager persWM(server, dnsServer);
@@ -7773,6 +7774,10 @@ void handleWiFi(boolean instant)
     if (rto->allowUpdatesOTA) {
         ArduinoOTA.handle();
     }
+    if (pendingFirmwareRestart) {
+        delay(500);
+        ESP.restart();
+    }
     yield();
 }
 
@@ -9877,6 +9882,26 @@ void startWebserver()
     server.on("/spiffs/format", HTTP_GET, [](AsyncWebServerRequest *request) {
         request->send(200, "application/json", LittleFS.format() ? "true" : "false");
     });
+
+    server.on(
+        "/firmware/update", HTTP_POST,
+        [](AsyncWebServerRequest *request) {
+            bool ok = !Update.hasError();
+            request->send(200, "application/json", ok ? "true" : "false");
+            if (ok) pendingFirmwareRestart = true;
+        },
+        [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+            if (!index) {
+                Update.runAsync(true);
+                Update.begin((ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000, U_FLASH);
+            }
+            if (len) {
+                Update.write(data, len);
+            }
+            if (final) {
+                Update.end(true);
+            }
+        });
 
     server.on("/wifi/status", HTTP_GET, [](AsyncWebServerRequest *request) {
         WiFiMode_t wifiMode = WiFi.getMode();

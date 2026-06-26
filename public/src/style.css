@@ -534,7 +534,8 @@ section[name="alert"] {
   content: attr(gbs-progress);
 }
 
-.gbs-backup-input {
+.gbs-backup-input,
+.gbs-firmware-input {
   cursor: pointer;
   height: 100%;
   left: 0;

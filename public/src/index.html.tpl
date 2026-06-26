@@ -1364,6 +1364,28 @@
             </div>
           </fieldset>
           <fieldset class="gbs-fieldset">
+            <legend class="gbs-fieldset__legend">
+              <div class="gbs-icon">system_update</div>
+              <div>Firmware Update</div>
+            </legend>
+            <div class="gbs-flex">
+              <button
+                class="gbs-button gbs-button__control gbs-button__secondary gbs-firmware-select-button"
+              >
+                <div class="gbs-icon">folder_open</div>
+                <input type="file" class="gbs-firmware-input" accept=".bin"/>
+                <div class="gbs-firmware-filename">Select .bin file</div>
+              </button>
+              <button
+                class="gbs-button gbs-button__control gbs-firmware-update-button"
+                disabled
+              >
+                <div class="gbs-icon">system_update</div>
+                <div gbs-progress gbs-progress-firmware>Update</div>
+              </button>
+            </div>
+          </fieldset>
+          <fieldset class="gbs-fieldset">
             <legend class="gbs-fieldset__legend gbs-fieldset__legend--help"">
               <div class="gbs-icon">sd_card</div>
               <div>Backup [intended for same device]</div>
