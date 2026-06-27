@@ -6000,6 +6000,50 @@ void runSyncWatcher()
     // IF mode bits transiently clear during vsync when vsync extraction from csync isn't working.
     boolean genuineSyncLoss = !status16SpHsStable ||
         (detectedVideoMode == 0 && rto->videoStandardInput == 0);
+
+    // Detect CRTC timing changes (e.g. non-standard horizontal total) that confuse mode detection
+    // while keeping HSACT active. STATUS_SYNC_PROC_HTOTAL overflows its 12-bit register for long
+    // lines, MODE reads 0, but genuineSyncLoss stays false because HSACT never drops.
+    // Guard with htotal: during normal transient mode=0 (vsync extraction glitch on csync) the
+    // PLLAD stays locked so htotal stays near its expected value. During a real CRTC timing change
+    // the 12-bit register overflows and reads garbage (e.g. 9 for CPC PAL 3x-longer lines).
+    // Do NOT freeze — by the time we detect the anomaly the frame buffer is already corrupted.
+    // Do NOT funnel into genuineSyncLoss — that triggers noSyncCounter escalation, updateSpDynamic,
+    // and ultimately a wrong preset being applied.
+    // Instead: block all recovery machinery while the anomaly lasts, then on restore trigger a
+    // targeted framesync + phase reset so the GBS re-locks cleanly to the reverted timing.
+    {
+        static uint8_t modeUnknownCounter = 0;
+        static boolean crtcTimingHold = false;
+
+        if (crtcTimingHold) {
+            if (!genuineSyncLoss && detectedVideoMode == 0) {
+                return; // mode still unknown: skip all recovery machinery
+            }
+            // Mode returned to a valid value (or genuine sync loss) — fall through to normal handling
+            crtcTimingHold = false;
+            modeUnknownCounter = 0;
+            if (!genuineSyncLoss) {
+                SerialM.println(F("CRTC timing restored"));
+                rto->phaseIsSet = 0;
+                FrameSync::resetWithoutRecalculation();
+            }
+        }
+
+        if (!genuineSyncLoss && !crtcTimingHold && detectedVideoMode == 0 &&
+            rto->videoStandardInput > 0 && rto->videoStandardInput < 14 &&
+            GBS::STATUS_SYNC_PROC_HTOTAL::read() < 100) {
+            if (++modeUnknownCounter >= 5) {
+                SerialM.println(F("\nmode unknown while sync active (CRTC timing change?)"));
+                crtcTimingHold = true;
+                modeUnknownCounter = 0;
+                return; // skip recovery machinery for this iteration
+            }
+        } else if (!crtcTimingHold) {
+            modeUnknownCounter = 0;
+        }
+    }
+
     if (genuineSyncLoss && rto->videoStandardInput != 15) {
         rto->noSyncCounter++;
         rto->continousStableCounter = 0;
