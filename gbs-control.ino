@@ -6000,8 +6000,31 @@ void runSyncWatcher()
 
     // Once a mode is set, rely on HSACT (not IF mode bits) for sync loss detection.
     // IF mode bits transiently clear during vsync when vsync extraction from csync isn't working.
-    boolean genuineSyncLoss = !status16SpHsStable ||
+    boolean rawSyncLoss = !status16SpHsStable ||
         (detectedVideoMode == 0 && rto->videoStandardInput == 0);
+
+    // Debounce the HSACT-based sync loss on established SD/HD modes. getStatus16SpHsStable() is a
+    // single un-debounced read of the HS-active flag, and on dark / near-black content (where
+    // sync-on-green is marginal) that flag flickers for a frame. A single flaky read would flip
+    // genuineSyncLoss true, which resets continousStableCounter, bumps noSyncCounter, freezes, and
+    // makes the recovery ramp re-run optimizePhaseSP() — the sampling-phase shift shows up as
+    // pixels / artefacts jumping around. Requiring a few consecutive bad reads rides out the glitch.
+    // Only debounce for SP-driven modes (1..13); during mode search (0) and RGBHV (14/15) react
+    // immediately as before.
+    static uint8_t syncLossDebounce = 0;
+    boolean genuineSyncLoss;
+    if (rto->videoStandardInput >= 1 && rto->videoStandardInput <= 13) {
+        if (rawSyncLoss) {
+            if (syncLossDebounce < 255)
+                syncLossDebounce++;
+        } else {
+            syncLossDebounce = 0;
+        }
+        genuineSyncLoss = (syncLossDebounce >= 3);
+    } else {
+        syncLossDebounce = 0;
+        genuineSyncLoss = rawSyncLoss;
+    }
 
     // Detect CRTC timing changes (e.g. non-standard horizontal total) that confuse mode detection
     // while keeping HSACT active. STATUS_SYNC_PROC_HTOTAL overflows its 12-bit register for long
