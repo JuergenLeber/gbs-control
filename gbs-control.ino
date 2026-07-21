@@ -5875,6 +5875,8 @@ void runSyncWatcher()
     static uint16_t activeStableLineCount = 0;
     static unsigned long lastSyncDrop = millis();
     static unsigned long lastLineCountMeasure = millis();
+    // counts consecutive "no signal" probes that find the source completely inactive
+    static uint8_t sourceGoneProbeCount = 0;
 
     uint16_t thisStableLineCount = 0;
     uint8_t detectedVideoMode = getVideoMode();
@@ -6166,9 +6168,11 @@ void runSyncWatcher()
                 // exception: we're in startup and pllad isn't locked yet > HLOW_LEN always 0
                 hlowStart = 777; // now it'll run optimizeSogLevel if needed
             }
+            boolean sourceStillActive = false;
             for (int a = 0; a < 128; a++) {
                 if (GBS::STATUS_SYNC_PROC_HLOW_LEN::read() != hlowStart) {
                     // source still there
+                    sourceStillActive = true;
                     if (rto->noSyncCounter % 450 == 0) {
                         rto->currentLevelSOG = 0; // worst case, sometimes necessary, will be unstable but at least detect
                         setAndUpdateSogLevel(rto->currentLevelSOG);
@@ -6182,6 +6186,25 @@ void runSyncWatcher()
                     setAndUpdateSogLevel(rto->currentLevelSOG);
                 }
                 delay(0);
+            }
+
+            // The HLOW_LEN probe above found no source activity at all. freezeVideo() only stops
+            // capture — it keeps the last (frequently corrupted) frame on the DAC output, so when
+            // the source is simply switched off that garbage frame stays on screen indefinitely.
+            // Require two consecutive probes to agree the source is gone (guards against a single
+            // momentarily-static HLOW_LEN reading), then just blank the DAC so nothing is shown.
+            // Do NOT tear down to low power / reset parameters here: that wipes videoStandardInput
+            // and the tuned SOG/sync config, forcing a slow full re-detection when the source comes
+            // back. Keeping the config lets the normal recovery path re-lock in place quickly; the
+            // DAC is re-enabled again in the "mode stable again" branch below.
+            if (sourceStillActive) {
+                sourceGoneProbeCount = 0;
+            } else if (sourceGoneProbeCount < 255) {
+                sourceGoneProbeCount++;
+            }
+            if (sourceGoneProbeCount >= 2 && GBS::DAC_RGBS_PWDNZ::read() == 1) {
+                SerialM.println(F("source gone, blanking output"));
+                GBS::DAC_RGBS_PWDNZ::write(0); // black output instead of a frozen garbage frame
             }
 
             resetSyncProcessor();
@@ -6334,6 +6357,7 @@ void runSyncWatcher()
 
         rto->noSyncCounter = 0;
         newVideoModeCounter = 0;
+        sourceGoneProbeCount = 0; // source is back, forget any pending "source gone" probes
 
         if (rto->continousStableCounter == 1 && !doFullRestore) {
             rto->videoIsFrozen = true; // ensures unfreeze
@@ -6349,6 +6373,9 @@ void runSyncWatcher()
             }
             rto->videoIsFrozen = true; // ensures unfreeze
             unfreezeVideo();           // called 2nd time here to make sure
+            if (GBS::DAC_RGBS_PWDNZ::read() == 0) {
+                GBS::DAC_RGBS_PWDNZ::write(1); // re-enable output if it was blanked on source loss
+            }
         }
 
         if (rto->continousStableCounter == 4) {
